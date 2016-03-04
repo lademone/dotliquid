@@ -21,13 +21,22 @@ namespace DotLiquid.Tags
 	/// </summary>
 	public class Literal : DotLiquid.Block
 	{
-		public static string FromShortHand(string @string)
-		{
-			if (@string == null)
-				return @string;
+        private static Regex literalShorthandRegex = new Regex(Liquid.LiteralShorthand, RegexOptions.Compiled);
 
-			Match match = Regex.Match(@string, Liquid.LiteralShorthand);
-			return match.Success ? string.Format(@"{{% literal %}}{0}{{% endliteral %}}", match.Groups[1].Value) : @string;
+        public static void FromShortHand(StringBuilder @string)
+		{
+			if (@string.Length > 0)
+            {
+                Match match = literalShorthandRegex.Match(@string.ToString());
+
+                if (match.Success)
+                {
+                    @string.Remove(match.Groups[1].Index + match.Groups[1].Length, @string.Length - match.Groups[1].Length - match.Groups[1].Index)
+                           .Remove(0, match.Groups[1].Index)
+                           .Insert(0, "{% literal %}")
+                           .Append("{% endliteral %}");
+                }
+            }
 		}
 
 		protected override void Parse(List<string> tokens)

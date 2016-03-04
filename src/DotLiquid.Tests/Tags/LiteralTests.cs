@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using DotLiquid.Exceptions;
 using NUnit.Framework;
 using DotLiquid.Tags;
+using System.Text;
 
 namespace DotLiquid.Tests.Tags
 {
@@ -49,13 +50,19 @@ namespace DotLiquid.Tests.Tags
 		[Test]
 		public void TestFromShorthand()
 		{
-			Assert.AreEqual("{% literal %}gnomeslab{% endliteral %}", Literal.FromShortHand("{{{gnomeslab}}}"));
-		}
+            StringBuilder sb = new StringBuilder("{{{gnomeslab}}}");
+            Literal.FromShortHand(sb);
+
+            Assert.AreEqual("{% literal %}gnomeslab{% endliteral %}", sb.ToString());
+        }
 
 		[Test]
 		public void TestFromShorthandIgnoresImproperSyntax()
 		{
-			Assert.AreEqual("{% if 'hi' == 'hi' %}hi{% endif %}", Literal.FromShortHand("{% if 'hi' == 'hi' %}hi{% endif %}"));
-		}
+            StringBuilder sb = new StringBuilder("{% if 'hi' == 'hi' %}hi{% endif %}");
+            Literal.FromShortHand(sb);
+
+            Assert.AreEqual("{% if 'hi' == 'hi' %}hi{% endif %}", sb.ToString());
+        }
 	}
 }

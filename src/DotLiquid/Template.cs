@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using DotLiquid.FileSystems;
 using DotLiquid.Util;
 using DotLiquid.NamingConventions;
+using System.Text;
 
 namespace DotLiquid
 {
@@ -30,15 +31,22 @@ namespace DotLiquid
 		private static Dictionary<string, Type> Tags { get; set; }
         private static readonly Dictionary<Type, Func<object, object>> SafeTypeTransformers;
 		private static readonly Dictionary<Type, Func<object, object>> ValueTypeTransformers;
+        private static readonly Regex TrimLeadingWhitespaceRegex;
+        private static readonly Regex TrimTrailingWhitespaceRegex;
+        private static readonly Regex TemplateParserRegex;
 
-		static Template()
+        static Template()
 		{
 			NamingConvention = new RubyNamingConvention();
 			FileSystem = new BlankFileSystem();
 			Tags = new Dictionary<string, Type>();
             SafeTypeTransformers = new Dictionary<Type, Func<object, object>>();
 			ValueTypeTransformers = new Dictionary<Type, Func<object, object>>();
-		}
+
+            TrimLeadingWhitespaceRegex = new Regex(string.Format(@"([ \t]+)?({0}|{1})-", Liquid.VariableStart, Liquid.TagStart), RegexOptions.Compiled);
+            TrimTrailingWhitespaceRegex = new Regex(string.Format(@"-({0}|{1})(\n|\r\n|[ \t]+)?", Liquid.VariableEnd, Liquid.TagEnd), RegexOptions.Compiled);
+            TemplateParserRegex = new Regex(Liquid.TemplateParser, RegexOptions.Compiled);
+        }
 
 		public static void RegisterTag<T>(string name)
 			where T : Tag, new()
@@ -142,13 +150,24 @@ namespace DotLiquid
 		/// <returns></returns>
 		public static Template Parse(string source)
 		{
-			Template template = new Template();
-			template.ParseInternal(source);
-			return template;
+            return Parse(new StringBuilder(source));
 		}
 
-		private Hash _registers, _assigns, _instanceAssigns;
+        /// <summary>
+		/// Creates a new <tt>Template</tt> object from liquid source code
+		/// </summary>
+		/// <param name="source"></param>
+		/// <returns></returns>
+		public static Template Parse(StringBuilder source)
+        {
+            Template template = new Template();
+            template.ParseInternal(source);
+            return template;
+        }
+
+        private Hash _registers, _assigns, _instanceAssigns;
 		private List<Exception> _errors;
+        private bool _containTags = false;
 
 		public Document Root { get; set; }
 
@@ -172,6 +191,11 @@ namespace DotLiquid
 			get { return (_errors = _errors ?? new List<Exception>()); }
 		}
 
+        public bool ContainTags
+        {
+            get { return _containTags; }
+        }
+
 		/// <summary>
 		/// Creates a new <tt>Template</tt> from an array of tokens. Use <tt>Template.parse</tt> instead
 		/// </summary>
@@ -187,19 +211,33 @@ namespace DotLiquid
 		/// <returns></returns>
 		internal Template ParseInternal(string source)
 		{
-			source = DotLiquid.Tags.Literal.FromShortHand(source);
-			source = DotLiquid.Tags.Comment.FromShortHand(source);
-
-			Root = new Document();
-			Root.Initialize(null, null, Tokenize(source));
-			return this;
+			return ParseInternal(new StringBuilder(source));
 		}
 
-		/// <summary>
-		/// Renders the template using default parameters and returns a string containing the result.
+        /// <summary>
+		/// Parse source code.
+		/// Returns self for easy chaining
 		/// </summary>
+		/// <param name="source"></param>
 		/// <returns></returns>
-		public string Render()
+		internal Template ParseInternal(StringBuilder source)
+        {
+            DotLiquid.Tags.Literal.FromShortHand(source);
+            DotLiquid.Tags.Comment.FromShortHand(source);
+
+            Root = new Document();
+            Root.Initialize(null, null, Tokenize(source));
+
+            _containTags = Root.NodeList.Any(x => !(x is string));
+
+            return this;
+        }
+
+        /// <summary>
+        /// Renders the template using default parameters and returns a string containing the result.
+        /// </summary>
+        /// <returns></returns>
+        public string Render()
 		{
 			return Render(new RenderParameters());
 		}
@@ -294,23 +332,36 @@ namespace DotLiquid
 			}
 		}
 
-		/// <summary>
+        /// <summary>
 		/// Uses the <tt>Liquid::TemplateParser</tt> regexp to tokenize the passed source
 		/// </summary>
 		/// <param name="source"></param>
 		/// <returns></returns>
 		internal static List<string> Tokenize(string source)
+        {
+            if (string.IsNullOrEmpty(source))
+                return new List<string>();
+
+            return Tokenize(new StringBuilder(source));
+        }
+
+        /// <summary>
+        /// Uses the <tt>Liquid::TemplateParser</tt> regexp to tokenize the passed source
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
+        internal static List<string> Tokenize(StringBuilder source)
 		{
-			if (string.IsNullOrEmpty(source))
+			if (source.Length == 0)
 				return new List<string>();
 
 			// Trim leading whitespace.
-			source = Regex.Replace(source, string.Format(@"([ \t]+)?({0}|{1})-", Liquid.VariableStart, Liquid.TagStart), "$2");
+			var sourceTrimmed = TrimLeadingWhitespaceRegex.Replace(source.ToString(), "$2");
 
-			// Trim trailing whitespace.
-			source = Regex.Replace(source, string.Format(@"-({0}|{1})(\n|\r\n|[ \t]+)?", Liquid.VariableEnd, Liquid.TagEnd), "$1");
+            // Trim trailing whitespace.
+            sourceTrimmed = TrimTrailingWhitespaceRegex.Replace(sourceTrimmed, "$1");
 
-			List<string> tokens = Regex.Split(source, Liquid.TemplateParser).ToList();
+			List<string> tokens = TemplateParserRegex.Split(sourceTrimmed).ToList();
 
 			// Trim any whitespace elements from the end of the array.
 			for (int i = tokens.Count - 1; i > 0; --i)

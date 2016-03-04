@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Text;
 using System.Web;
 using NUnit.Framework;
 
@@ -336,5 +338,17 @@ namespace DotLiquid.Tests
 
 			Assert.AreEqual("", output);
 		}
-	}
+
+        [Test]
+        public void TestContainTags()
+        {
+            Template template = Template.Parse("Lorem ipsum{{context.Name}}");
+
+            Assert.IsTrue(template.ContainTags);
+
+            Template template2 = Template.Parse("Lorem ipsum");
+
+            Assert.IsFalse(template2.ContainTags);
+        }
+    }
 }
